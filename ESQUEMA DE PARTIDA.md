@@ -1,3 +1,27 @@
+/tu-repositorio-github
+├── init.py                 # El script de arranque (en la raíz)
+├── docker-compose.yml      # El orquestador (en la raíz)
+├── .env                    # Variables (generado por init.py)
+│
+├── /workspace              # Entorno de ataque
+│   ├── Dockerfile.kali     # El Dockerfile que ya tienes
+│   └── entrypoint.sh       # Script de inicio de Kali
+│
+├── /core                   # El cerebro/orquestador
+│   ├── Dockerfile.agent    # El Dockerfile del Agente Python
+│   └── /src                # Tu código Python (main.py, etc.)
+│
+├── /hermes                 # El investigador web
+│   ├── Dockerfile.hermes   # El Dockerfile de Hermes
+│   └── /src                # Código de búsqueda web
+│
+└── /volumes                # Estas carpetas las crea el init.py
+    ├── /targets            # Máquinas DockerLabs
+    ├── /scripts            # Tus herramientas .sh o .py
+    ├── /evidence           # Capturas de nmap, logs, etc.
+    └── /reports            # Informes de la IA
+    
+    
 Queremos un laboratorio autonomo que realice CTF y auditorias de ciberseguridad con la ayuda de IA en local.
 
 queremos levantar el lab con ayuda de docker, para securizar al máximo el flujo de trabajo.
