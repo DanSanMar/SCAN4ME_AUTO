@@ -1,3 +1,168 @@
+El Script de Inicio se encargará de la orquestación, validación y creación de carpetas, pero leerá los Dockerfiles y el Compose de archivos físicos independientes en lugar de tenerlos embebidos en el código.
+
+Aquí tienes la estructura de archivos final y el script de arranque optimizado.
+
+1. Estructura de Archivos (Pre-requisito)
+Crea una carpeta para el proyecto y organiza los archivos así:
+
+Plaintext
+/proyecto-lab
+├── init.py                # Script de arranque multiplataforma
+├── docker-compose.yml     # Orquestación de servicios
+├── .env                   # Variables (Modelos, IPs, Credenciales)
+├── /workspace
+│   └── Dockerfile.kali    # Definición de la máquina de ataque
+├── /core
+│   └── Dockerfile.agent   # Definición del Orquestador (Python/IA)
+├── /hermes
+│   └── Dockerfile.hermes  # Agente con acceso a Internet
+└── /volumes               # Se crearán automáticamente
+    ├── targets, scripts, evidence, reports
+2. El Docker-Compose Independiente (docker-compose.yml)
+Este archivo es el mapa maestro. Fíjate en el aislamiento de redes.
+
+YAML
+services:
+  # El Cerebro Local
+  ollama:
+    image: ollama/ollama
+    container_name: ollama_brain
+    volumes:
+      - ./volumes/ollama_data:/root/.ollama
+    networks:
+      - net_admin
+
+  # El Brazo Ejecutor
+  kali:
+    build:
+      context: ./workspace
+      dockerfile: Dockerfile.kali
+    container_name: kali_lab
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+    volumes:
+      - ./volumes/targets:/home/kali/targets
+      - ./volumes/scripts:/home/kali/scripts
+      - ./volumes/evidence:/home/kali/evidence
+      - ./volumes/reports:/home/kali/reports
+    networks:
+      - net_attack
+
+  # El Orquestador (IA Local)
+  agent:
+    build:
+      context: ./core
+      dockerfile: Dockerfile.agent
+    container_name: agent_bridge
+    depends_on:
+      - ollama
+      - kali
+    volumes:
+      - ./volumes/evidence:/app/evidence:ro
+      - ./volumes/reports:/app/reports
+    networks:
+      - net_admin
+      - net_attack
+
+  # El Investigador (Acceso a Internet)
+  hermes:
+    build:
+      context: ./hermes
+      dockerfile: Dockerfile.hermes
+    container_name: hermes_cti
+    volumes:
+      - ./volumes/reports:/app/reports
+    networks:
+      - net_admin
+      - net_internet
+
+networks:
+  net_admin:    # Comunicación IA <-> Orquestador
+  net_attack:   # Comunicación Orquestador <-> Kali <-> Targets (Aislada)
+  net_internet: # Solo para Hermes
+3. El Script de Arranque Inteligente (init.py)
+Este script ahora es un gestor de entorno. No escribe los archivos, sino que prepara el sistema para que docker-compose funcione.
+
+Python
+import os
+import platform
+import subprocess
+import shutil
+
+class LabInitializer:
+    def __init__(self):
+        self.os = platform.system()
+        self.required_folders = [
+            "volumes/targets", "volumes/scripts", 
+            "volumes/evidence", "volumes/reports",
+            "volumes/ollama_data"
+        ]
+
+    def check_env(self):
+        print(f"[*] Detectado sistema operativo: {self.os}")
+        
+        # Comprobar Docker
+        if shutil.which("docker") is None:
+            print("[!] Docker no encontrado.")
+            if self.os == "Windows":
+                print("[>] Por favor, instala Docker Desktop desde la web oficial.")
+            else:
+                print("[>] Ejecuta: sudo apt update && sudo apt install docker.io")
+            exit(1)
+
+    def create_volumes(self):
+        print("[*] Configurando volúmenes locales...")
+        for folder in self.required_folders:
+            os.makedirs(folder, exist_ok=True)
+            print(f"  [+] Preparado: {folder}")
+
+    def launch(self):
+        print("[*] Levantando infraestructura independiente...")
+        try:
+            # Recomienda build para asegurar que los Dockerfiles independientes se procesen
+            subprocess.run(["docker-compose", "up", "--build", "-d"], check=True)
+            print("\n[SUCCESS] Laboratorio autónomo en marcha.")
+            print("[INFO] Coloca tus máquinas en ./volumes/targets")
+            print("[INFO] Los informes aparecerán en ./volumes/reports")
+        except subprocess.CalledProcessError:
+            print("[!] Error al levantar el compose. Revisa los Dockerfiles.")
+
+if __name__ == "__main__":
+    init = LabInitializer()
+    init.check_env()
+    init.create_volumes()
+    init.launch()
+4. Dockerfile de Kali Independiente (./workspace/Dockerfile.kali)
+Dockerfile
+FROM kalilinux/kali-rolling
+
+# Instalación de herramientas sin interacción
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+    kali-linux-headless \
+    openssh-server \
+    iputils-ping \
+    curl \
+    nmap \
+    metasploit-framework \
+    && apt-get clean
+
+# Configuración SSH para el Agente
+RUN mkdir /var/run/sshd
+RUN echo 'root:kali' | chpasswd
+RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+
+EXPOSE 22
+CMD ["/usr/sbin/sshd", "-D"]
+¿Por qué hacerlo así?
+Mantenibilidad: Si quieres actualizar Kali, solo editas Dockerfile.kali sin tocar el script de Python.
+
+Portabilidad: Puedes llevarte la carpeta /volumes a otro disco duro y el sistema seguirá funcionando.
+
+Seguridad: Al estar separados, puedes auditar el docker-compose.yml para asegurarte de que ninguna red se "mezcle" accidentalmente.
+
 Queremos un laboratorio autonomo que realice CTF y auditorias de ciberseguridad con la ayuda de IA en local.
 
 queremos levantar el lab con ayuda de docker, para securizar al máximo el flujo de trabajo.
