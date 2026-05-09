@@ -1,0 +1,1 @@
+Necesitamos un script que compruebe si es windows o linux por si hay diferencias, compruebe que se tienen los programas necesarios (con autoinstalación si es necesario) para levantar el compose y genere los directorios necesarios, el docker-compose.yml y los dockerfile
