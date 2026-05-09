@@ -20,8 +20,22 @@
     ├── /scripts            # Tus herramientas .sh o .py
     ├── /evidence           # Capturas de nmap, logs, etc.
     └── /reports            # Informes de la IA
+
+
     
-    
+Resumen de la Estructura Final en el Repo
+Para que tu init.py funcione sin errores, tu repositorio de GitHub debería verse así:
+
+/core: Dockerfile.agent + carpeta /src (con main.py).
+
+/hermes: Dockerfile.hermes + carpeta /src (con el buscador).
+
+
+/workspace: Tu Dockerfile.kali + entrypoint.sh.   
+
+/brain: Dockerfile.brain (opcional si usas la imagen directa en el compose).
+
+Raíz: docker-compose.yml, .env (generado por init.py) e init.py.    
 Queremos un laboratorio autonomo que realice CTF y auditorias de ciberseguridad con la ayuda de IA en local.
 
 queremos levantar el lab con ayuda de docker, para securizar al máximo el flujo de trabajo.
