@@ -108,3 +108,4 @@ mv "$reporte_txt" "$FOLDER_EVIDENCES/pre_recon_${target}.txt"
 
 echo "[✓] Scan4me finalizado. Despertando al Agente de IA para el análisis estratégico..."
 echo "TARGET_IP=$target" > /home/kali/autodeploy/active_lab.txt
+echo "SCAN_READY=TRUE" >> /home/kali/autodeploy/active_lab.txt
