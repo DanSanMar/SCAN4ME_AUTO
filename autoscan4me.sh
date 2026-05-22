@@ -2,12 +2,6 @@
 
 export TERM=xterm-256color
 
-# --- COMPROBACIÓN DE ROOT Y ARGUMENTOS ---
-if [[ $EUID -ne 0 ]]; then
-   echo "❌ Este script debe ejecutarse como root (necesario para escaneos SYN de Nmap)." 
-   exit 1
-fi
-
 target=$1
 subpath=$2 # Opcional: subdirectorio para WPScan (ej: /wordpress)
 
@@ -30,7 +24,7 @@ FEROX_BIN=$(command -v feroxbuster || echo "/snap/bin/feroxbuster")
 WPSCAN_BIN=$(command -v wpscan || echo "/usr/local/bin/wpscan")
 wordlist="/usr/share/seclists/Discovery/Web-Content/common.txt"
 
-# Si no existe en la ruta de apt, buscamos en el home del usuario
+# Si no existe en la ruta de apt, buscamos en el home del usuario[cite: 3]
 if [ ! -f "$wordlist" ]; then
     wordlist="/home/kali/seclists/Discovery/Web-Content/common.txt"
 fi
@@ -42,6 +36,7 @@ echo -e "🎯 OBJETIVO CRÍTICO ASIGNADO: $target\n" >> "$reporte_txt"
 # FASE 1: NMAP (DESCUBRIMIENTO RÁPIDO)
 # ---------------------------------------------------------
 echo "[+] scan4me -> Buscando puertos abiertos..."
+# Al ser root nativo en el contenedor, esto se ejecutará perfectamente sin sudo[cite: 2]
 open_ports=$(nmap -sS -p- -n -Pn --open -T4 "$target" 2>/dev/null | grep "/tcp" | cut -d/ -f1 | xargs | tr ' ' ',')
 
 if [ -z "$open_ports" ]; then
@@ -51,7 +46,6 @@ fi
 
 if [ -z "$open_ports" ]; then
     echo -e "❌ CRÍTICO: No se encontraron puertos abiertos en $target. Generando reporte mínimo para la IA." >> "$reporte_txt"
-    # Aun así levantamos la alerta para que la IA decida qué hacer o use ping/udp.
     echo "TARGET_IP=$target" > /home/kali/autodeploy/active_lab.txt
     exit 0
 fi
@@ -66,7 +60,6 @@ echo -e "\n==================================================" >> "$reporte_txt"
 echo -e "🔍 ANÁLISIS DE VERSIONES Y VULNERABILIDADES (NMAP)" >> "$reporte_txt"
 echo -e "==================================================\n" >> "$reporte_txt"
 
-# Redirigimos el output de nmap directo al txt que leerá la IA
 nmap -sCV -p "$open_ports" -Pn -n "$target" >> "$reporte_txt" 2>/dev/null
 
 # Establecer URL base para las herramientas web
@@ -76,19 +69,19 @@ url="http://$target"
 if [[ "$open_ports" == *"80"* ]] || [[ "$open_ports" == *"443"* ]] || [[ "$open_ports" == *"8080"* ]]; then
 
     # ---------------------------------------------------------
-    # FASE 3: WHATWEB (TECNOLOGÍAS)
+    # FASE 3: WHATWEB (TECNOLOGÍAS)[cite: 4]
     # ---------------------------------------------------------
-    echo "[+] scan4me -> Identificando tecnologías web (WhatWeb)..."
+    echo "[+] scan4me -> Identificando tecnologías web (WhatWeb)..."[cite: 4]
     echo -e "\n==================================================" >> "$reporte_txt"
     echo -e "🌐 RECONOCIMIENTO DE TECNOLOGÍAS (WHATWEB)" >> "$reporte_txt"
     echo -e "==================================================\n" >> "$reporte_txt"
-    whatweb -a 1 -t 1 -v --no-errors --open-timeout=5 --read-timeout=5 "$url" >> "$reporte_txt" 2>/dev/null
+    whatweb -a 1 -t 1 -v --no-errors --open-timeout=5 --read-timeout=5 "$url" >> "$reporte_txt" 2>/dev/null[cite: 4]
 
     # ---------------------------------------------------------
-    # FASE 4: FEROXBUSTER (FUZZING DIR CORTO)
+    # FASE 4: FEROXBUSTER (FUZZING DIR CORTO)[cite: 4]
     # ---------------------------------------------------------
     if [ -f "$wordlist" ] && [ -x "$FEROX_BIN" ]; then
-        echo "[+] scan4me -> Realizando descubrimiento de directorios (Feroxbuster)..."
+        echo "[+] scan4me -> Realizando descubrimiento de directorios (Feroxbuster)..."[cite: 4]
         echo -e "\n==================================================" >> "$reporte_txt"
         echo -e "📂 ESTRUCTURA DE DIRECTORIOS WEB (FEROXBUSTER)" >> "$reporte_txt"
         echo -e "==================================================\n" >> "$reporte_txt"
@@ -96,15 +89,14 @@ if [[ "$open_ports" == *"80"* ]] || [[ "$open_ports" == *"443"* ]] || [[ "$open_
     fi
 
     # ---------------------------------------------------------
-    # FASE 5: WPSCAN (SI EXISTE WORDPRESS)
+    # FASE 5: WPSCAN (SI EXISTE WORDPRESS)[cite: 4]
     # ---------------------------------------------------------
-    # Un check rápido para no lanzar WPScan si no es necesario
     if grep -iq "wordpress" "$reporte_txt" || [ -n "$subpath" ]; then
-        echo "[+] scan4me -> Detectado posible entorno WordPress. Lanzando WPScan..."
+        echo "[+] scan4me -> Detectado posible entorno WordPress. Lanzando WPScan..."[cite: 4]
         echo -e "\n==================================================" >> "$reporte_txt"
         echo -e "🛠️ ESCANEO ESPECÍFICO DE WORDPRESS (WPSCAN)" >> "$reporte_txt"
         echo -e "==================================================\n" >> "$reporte_txt"
-        $WPSCAN_BIN --url "$url$subpath" -e u,ap --detection-mode aggressive --force --no-update >> "$reporte_txt" 2>/dev/null
+        $WPSCAN_BIN --url "$url$subpath" -e u,ap --detection-mode aggressive --force --no-update >> "$reporte_txt" 2>/dev/null[cite: 4]
     fi
 fi
 
@@ -113,7 +105,6 @@ echo -e "\n🏁 FINALIZACIÓN DEL RECONOCIMIENTO PREVIO: $(date '+%d-%m-%Y %H:%M
 # -----------------------------------------------------------------
 # PASO CRÍTICO: SEÑALIZAR EL INICIO DEL AGENTE DE IA
 # -----------------------------------------------------------------
-# Mover el reporte finalizado a un directorio donde la IA pueda leerlo con total certeza
 mv "$reporte_txt" "$FOLDER_EVIDENCES/pre_recon_${target}.txt"
 
 echo "[✓] Scan4me finalizado. Despertando al Agente de IA para el análisis estratégico..."
