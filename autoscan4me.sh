@@ -16,12 +16,13 @@ reporte_txt="/tmp/recon_${target}.txt"
 touch "$reporte_txt"
 
 echo "======================================================"
-echo " 🚀 SCAN4ME: PREPARANDO RECONOCIMIENTO PARA EL AGENTE IA: $target "
+echo " 🚀 SCAN4ME: PREPARANDO RECONOCIMIENTO ULTRA-COMPLETO "
 echo "======================================================"
 
 # --- ENCONTRAR BINARIOS DE FORMA ROBUSTA EN TU DOCKER KALI ---
 FEROX_BIN=$(command -v feroxbuster || echo "/usr/bin/feroxbuster")
 WPSCAN_BIN=$(command -v wpscan || echo "/usr/bin/wpscan")
+NUCLEI_BIN=$(command -v nuclei || echo "/usr/bin/nuclei")
 
 # Intentar localizar la wordlist común en orden de prioridad
 for path in \
@@ -49,13 +50,12 @@ if [ -z "$open_ports" ]; then
 fi
 
 open_udp_ports=""
-# Si no hay puertos TCP o queremos ampliar el espectro, buscamos los UDP más comunes
 if [ -z "$open_ports" ]; then
     echo -e "⚠️ No se detectaron puertos TCP abiertos. Intentando escaneo UDP rápido (--top-ports 100)..."
     open_udp_ports=$(nmap -sU --top-ports 100 -n -Pn --open -T4 "$target" 2>/dev/null | grep "/udp" | cut -d/ -f1 | xargs | tr ' ' ',')
 fi
 
-# Control crítico unificado: Si ambos están completamente vacíos, se aborta y se notifica a la IA
+# Control crítico unificado
 if [ -z "$open_ports" ] && [ -z "$open_udp_ports" ]; then
     echo -e "❌ CRÍTICO: No se encontraron puertos abiertos (TCP ni UDP) en $target. Generando reporte mínimo para la IA." >> "$reporte_txt"
     mv "$reporte_txt" "$FOLDER_EVIDENCES/pre_recon_${target}.txt"
@@ -64,34 +64,57 @@ if [ -z "$open_ports" ] && [ -z "$open_udp_ports" ]; then
     exit 0
 fi
 
-# Volcar la información recolectada al reporte preliminar
 [ -n "$open_ports" ] && echo -e "Puertos TCP abiertos identificados: $open_ports" >> "$reporte_txt"
 [ -n "$open_udp_ports" ] && echo -e "Puertos UDP abiertos identificados: $open_udp_ports" >> "$reporte_txt"
 
 # ---------------------------------------------------------
-# FASE 2: NMAP PROFUNDO (Especializado según protocolo)
+# FASE 2: NMAP PROFUNDO (Versiones, Scripts Básicos y Vuln)
 # ---------------------------------------------------------
 echo -e "\n==================================================" >> "$reporte_txt"
 echo -e "🔍 ANÁLISIS DE VERSIONES Y VULNERABILIDADES (NMAP)" >> "$reporte_txt"
 echo -e "==================================================\n" >> "$reporte_txt"
 
 if [ -n "$open_ports" ]; then
-    echo "[+] scan4me -> Analizando versiones y scripts en puertos TCP ($open_ports)..."
-    nmap -sCV -p "$open_ports" -Pn -n "$target" >> "$reporte_txt" 2>/dev/null
+    echo "[+] scan4me -> Analizando versiones, scripts por defecto y vuln en puertos TCP..."
+    # Ejecutamos todo en una sola pasada optimizada pasándole adecuadamente el objetivo al final
+    nmap -sCV --script default,vuln -p "$open_ports" -Pn -n "$target" >> "$reporte_txt" 2>/dev/null
 fi
 
 if [ -n "$open_udp_ports" ]; then
-    echo "[+] scan4me -> Analizando versiones y scripts en puertos UDP ($open_udp_ports)..."
+    echo "[+] scan4me -> Analizando versiones y scripts en puertos UDP..."
     nmap -sCV -sU -p "$open_udp_ports" -Pn -n "$target" >> "$reporte_txt" 2>/dev/null
+fi
+
+# ---------------------------------------------------------
+# NUEVA FASE: ENUMERACIÓN DE INFRAESTRUCTURA (SMB / RPC / BD)
+# ---------------------------------------------------------
+if echo "$open_ports" | grep -qE '\b(139|445)\b'; then
+    echo -e "\n==================================================" >> "$reporte_txt"
+    echo -e "🖥️ ENUMERACIÓN DE SERVICIOS COMPARTIDOS (SMB)" >> "$reporte_txt"
+    echo -e "==================================================\n" >> "$reporte_txt"
+    echo "[+] scan4me -> Buscando recursos compartidos anónimos (smbclient)..."
+    smbclient -L "//$target" -N -W "WORKGROUP" >> "$reporte_txt" 2>/dev/null
+fi
+
+if echo "$open_ports" | grep -qE '\b(3306|6379)\b'; then
+    echo -e "\n==================================================" >> "$reporte_txt"
+    echo -e "🗄️ COMPROBACIÓN DE BASES DE DATOS (ACCESO TRIVIAL)" >> "$reporte_txt"
+    echo -e "==================================================\n" >> "$reporte_txt"
+    if echo "$open_ports" | grep -q '\b3306\b'; then
+        echo "[+] scan4me -> Probando login de root sin contraseña en MySQL..."
+        mysql -h "$target" -u root -e "SHOW DATABASES;" >> "$reporte_txt" 2>/dev/null && echo "[!] ¡ÉXITO! Acceso total sin credenciales en MySQL." >> "$reporte_txt"
+    fi
+    if echo "$open_ports" | grep -q '\b6379\b'; then
+        echo "[+] scan4me -> Probando conexión sin contraseña en Redis..."
+        redis-cli -h "$target" INFO 2>/dev/null | grep -E "redis_version|os" >> "$reporte_txt" && echo "[!] ¡ÉXITO! Autenticación deshabilitada en Redis." >> "$reporte_txt"
+    fi
 fi
 
 # ---------------------------------------------------------
 # FASES WEB: DETECCIÓN AMPLIADA DE PUERTOS COMUNES ALTERNATIVOS
 # ---------------------------------------------------------
-# Comprobamos puertos web típicos: 80, 443, 8000, 8080, 81, 3000, 5000, 8443
 if echo "$open_ports" | grep -qE '\b(80|443|8000|8080|81|3000|5000|8443)\b'; then
     
-    # Determinar el puerto exacto para los escaneos web inmediatos (usa el primero disponible)
     web_port=$(echo "$open_ports" | grep -oE '\b(80|443|8000|8080|81|3000|5000|8443)\b' | head -n 1)
     
     if [ "$web_port" == "443" ] || [ "$web_port" == "8443" ]; then
@@ -110,6 +133,18 @@ if echo "$open_ports" | grep -qE '\b(80|443|8000|8080|81|3000|5000|8443)\b'; the
     whatweb -a 1 -t 1 -v --no-errors --open-timeout=5 --read-timeout=5 "$url" >> "$reporte_txt" 2>/dev/null
 
     # ---------------------------------------------------------
+    # NUEVA FASE: NUCLEI (ESCANEO DE VULNERABILIDADES WEB)
+    # ---------------------------------------------------------
+    if [ -x "$NUCLEI_BIN" ]; then
+        echo "[+] scan4me -> Ejecutando escaneo rápido de vulnerabilidades web (Nuclei)..."
+        echo -e "\n==================================================" >> "$reporte_txt"
+        echo -e "🎯 ESCANEO DE VULNERABILIDADES WEB (NUCLEI)" >> "$reporte_txt"
+        echo -e "==================================================\n" >> "$reporte_txt"
+        # Escanea severidades críticas/altas/medias omitiendo actualizaciones previas para ir rápido
+        $NUCLEI_BIN -target "$url" -severity medium,high,critical -silent -no-update-templates >> "$reporte_txt" 2>/dev/null
+    fi
+
+    # ---------------------------------------------------------
     # FASE 4: FEROXBUSTER (FUZZING DIR CON RUTA VERIFICADA)
     # ---------------------------------------------------------
     if [ -n "$wordlist" ] && [ -x "$FEROX_BIN" ]; then
@@ -118,8 +153,6 @@ if echo "$open_ports" | grep -qE '\b(80|443|8000|8080|81|3000|5000|8443)\b'; the
         echo -e "📂 ESTRUCTURA DE DIRECTORIOS WEB (FEROXBUSTER)" >> "$reporte_txt"
         echo -e "==================================================\n" >> "$reporte_txt"
         $FEROX_BIN --url "$url" --wordlist "$wordlist" --extensions php,txt,xml,html --no-recursion --filter-size 0 --threads 40 --timeout 5 >> "$reporte_txt" 2>/dev/null
-    else
-        echo "⚠️ Alerta: Feroxbuster o la wordlist común no están disponibles para el pre-escaneo."
     fi
 
     # ---------------------------------------------------------
