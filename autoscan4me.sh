@@ -136,12 +136,12 @@ if echo "$open_ports" | grep -qE '\b(80|443|8000|8080|81|3000|5000|8443)\b'; the
     # NUEVA FASE: NUCLEI (ESCANEO DE VULNERABILIDADES WEB)
     # ---------------------------------------------------------
     if [ -x "$NUCLEI_BIN" ]; then
-        echo "[+] scan4me -> Ejecutando escaneo rápido de vulnerabilidades web (Nuclei)..."
-        echo -e "\n==================================================" >> "$reporte_txt"
-        echo -e "🎯 ESCANEO DE VULNERABILIDADES WEB (NUCLEI)" >> "$reporte_txt"
-        echo -e "==================================================\n" >> "$reporte_txt"
-        # Escanea severidades críticas/altas/medias omitiendo actualizaciones previas para ir rápido
-        $NUCLEI_BIN -target "$url" -severity medium,high,critical -silent -no-update-templates >> "$reporte_txt" 2>/dev/null
+    echo "[+] scan4me -> Ejecutando escaneo rápido de vulnerabilidades web (Nuclei)..."
+    echo -e "\n==================================================" >> "$reporte_txt"
+    echo -e "🎯 ESCANEO DE VULNERABILIDADES WEB (NUCLEI)" >> "$reporte_txt"
+    echo -e "==================================================\n" >> "$reporte_txt"
+    # Cambiado -no-update-templates por -no-update
+    $NUCLEI_BIN -target "$url" -severity medium,high,critical -silent -no-update >> "$reporte_txt" 2>/dev/null
     fi
 
     # ---------------------------------------------------------
